@@ -4,6 +4,8 @@ version = "0.0"
 
 dependencies = []
 
+requires-python = ">=3.10"
+
 [project.optional-dependencies]
 dev = ["pylint", "black"]
 test = ["pytest"]
