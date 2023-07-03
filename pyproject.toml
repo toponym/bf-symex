@@ -1,0 +1,9 @@
+[project]
+name = "bf-symex"
+version = "0.0"
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pylint", "black"]
+test = ["pytest"]
