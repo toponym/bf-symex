@@ -1,5 +1,14 @@
+"""CLI for bfsymex"""
 import argparse
 from bfsymex import Interpreter
+
+def get_code(file_path: str):
+    """Read code from file or stdin"""
+    if file_path:
+        with open(file_path, 'r', encoding='ascii') as file:
+            return file.read()
+    else:
+        return input("Enter program\n")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -13,19 +22,10 @@ if __name__ == "__main__":
                         help = 'file with program',
                         required = False)
     args = parser.parse_args()
+    code = get_code(args.file)
     match args.task:
         case "interpret":
-            code = ""
-            if args.file:
-                with open(args.file, 'r') as f:
-                    code = f.read()
-            else:
-                code = input("Enter program\n")
             interp = Interpreter(list(code))
-            interp.eval()
-            print("***Final State***")
-            print(repr(interp))
+            interp.interpret()
         case _:
             print("Case not supported yet: {args.task}")
-            
-            
