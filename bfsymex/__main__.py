@@ -1,6 +1,6 @@
 """CLI for bfsymex"""
 import argparse
-from bfsymex import Interpreter
+from bfsymex import Interpreter, SymbolicInterpreter
 
 def get_code(file_path: str):
     """Read code from file or stdin"""
@@ -16,7 +16,7 @@ if __name__ == "__main__":
         description = "Brainfuck Symbolic Execution",
     )
     parser.add_argument("task",
-                        choices = ['interpret'],
+                        choices = ['interpret', 'symex'],
                         help = 'task for bfsymex')
     parser.add_argument("-f", "--file",
                         help = 'file with program',
@@ -27,5 +27,8 @@ if __name__ == "__main__":
         case "interpret":
             interp = Interpreter(list(code))
             interp.interpret()
+        case "symex":
+            symex = SymbolicInterpreter(list(code))
+            symex.interpret()
         case _:
             print("Case not supported yet: {args.task}")

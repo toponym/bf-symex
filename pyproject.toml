@@ -2,7 +2,7 @@
 name = "bf-symex"
 version = "0.0"
 
-dependencies = []
+dependencies = ["z3-solver"]
 
 requires-python = ">=3.10"
 
