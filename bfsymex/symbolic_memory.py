@@ -1,4 +1,4 @@
-from z3 import BitVec, BitVecVal, BitVecRef
+from z3 import BitVec, BitVecVal, BitVecRef, simplify
 
 class MemoryAccessError(Exception):
     """Interpreter Memory Access Errors"""
@@ -22,5 +22,5 @@ class SymbolicMemory():
     
     def set(self, index, byte) -> None:
         self.memory_guard(index)
-        self.memory[index]= byte
+        self.memory[index]= simplify(byte)
     

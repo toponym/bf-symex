@@ -2,6 +2,7 @@
 import sys
 from .byte import ConcreteByte, SymbolicByte
 from .symbolic_memory import SymbolicMemory
+from z3 import BitVecNumRef, BitVecVal
 
 class StackError(Exception):
     """Interpreter Stack Errors"""
@@ -9,6 +10,7 @@ class StackError(Exception):
 class UnexpectedSymbolicError(Exception):
     """Interpreter Error when Value should be Concrete """
 
+#TODO abstract z3 objects away?
 class SymbolicInterpreter:
     """Symbolic Brainfuck Interpreter"""
 
@@ -73,37 +75,48 @@ class SymbolicInterpreter:
 
     def inc_mem(self):
         byte = self.memory.get(self.mem_ptr)
-        byte += 1
+        self.memory.set(self.mem_ptr, byte + 1)
         self.pc += 1
 
     def dec_mem(self):
         byte = self.memory.get(self.mem_ptr)
-        byte -= 1
+        self.memory.set(self.mem_ptr, byte - 1)
         self.pc += 1
 
     def enter_loop(self):
         # enter loop if current memory nonzero, otherwise skip
         # TODO add branching
-        #if self.memory.get(self.mem_ptr) != 0:
-        #    self.pc_stack.append(self.pc)
-        #    self.pc += 1
-        #else:
-        loop_count = 1
-        self.pc += 1
-        while loop_count != 0:
-            loop_instr = self.fetch()
-            if loop_instr == "]":
-                loop_count -= 1
-            if loop_instr == "[":
-                loop_count += 1
+        mem_byte = self.memory.get(self.mem_ptr)
+        if not isinstance(mem_byte, BitVecNumRef):
+            # can't handle branching from Symbolic bytes yet
+            raise NotImplementedError("Have not implemented branching")
+        mem_byte_num = mem_byte.as_long()
+        #print(f"[DEBUG] Branch pc: {self.pc} byte val: {mem_byte_num}")
+        if mem_byte_num != 0:
+            self.pc_stack.append(self.pc)
             self.pc += 1
+        else:
+            loop_count = 1
+            self.pc += 1
+            while loop_count != 0:
+                loop_instr = self.fetch()
+                if loop_instr == "]":
+                    loop_count -= 1
+                if loop_instr == "[":
+                    loop_count += 1
+                self.pc += 1
 
     def exit_loop(self):
         # TODO add branching
-        if len(self.pc_stack.as_val) == 0:
+        if len(self.pc_stack) == 0:
             raise StackError("Empty stack for jump")
+        mem_byte = self.memory.get(self.mem_ptr)
+        if not isinstance(mem_byte, BitVecNumRef):
+            # can't handle branching from Symbolic bytes yet
+            raise NotImplementedError
+        mem_byte_num = mem_byte.as_long()
         # exit loop if current memory cell is zero
-        if self.memory.get(self.mem_ptr) == 0:
+        if mem_byte_num == 0:
             self.pc_stack.pop()
             self.pc += 1
         else:
@@ -117,7 +130,7 @@ class SymbolicInterpreter:
         #    char = "\0"
         char = "\0"
         val = ord(char)
-        byte = ConcreteByte(val)
+        byte = BitVecVal(val, 8)
         self.memory.set(self.mem_ptr, byte)
         self.pc += 1
 
