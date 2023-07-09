@@ -1,8 +1,9 @@
 """Interpreter Class"""
 import sys
+import copy
 from .byte import ConcreteByte, SymbolicByte
 from .symbolic_memory import SymbolicMemory
-from z3 import BitVecNumRef, BitVecVal
+from z3 import BitVecNumRef, BitVecVal, BitVec, BoolVal, And
 
 class StackError(Exception):
     """Interpreter Stack Errors"""
@@ -22,6 +23,10 @@ class SymbolicInterpreter:
         self.mem_ptr = 0
         self.pc = 0
         self.pc_stack = []
+        self.input_byte_counter = 0
+        self.done = False
+        self.successors = []
+        self.path_constraint = BoolVal(True)
 
     def __repr__(self):
         string = f"PC: {self.pc}\n" \
@@ -30,14 +35,16 @@ class SymbolicInterpreter:
                     f"Memory: {self.memory}\n"
         return string
 
-    def interpret(self) -> None:
-        """Interpret instructions"""
-        while True:
+    def run(self) -> list:
+        """Execute insructions until done or successors generated"""
+        while len(self.successors) == 0 and not self.done:
             if self.pc >= len(self.instrs):
-                break
-            instr = self.fetch()
-            # no decoding necessary!
-            self.execute(instr)
+                self.done = True
+            else:
+                instr = self.fetch()
+                self.execute(instr)
+        return self.successors
+        
 
     def fetch(self) -> str:
         """Get next instruction"""
@@ -55,9 +62,9 @@ class SymbolicInterpreter:
             case "-":
                 self.dec_mem()
             case "[":
-                self.enter_loop()
+                self.start_loop()
             case "]":
-                self.exit_loop()
+                self.end_loop()
             case ",":
                 self.read()
             case ".":
@@ -66,80 +73,118 @@ class SymbolicInterpreter:
                 self.nop()
 
     def inc_mem_ptr(self):
+        """Implement '<': increment memory pointer"""
         self.mem_ptr += 1
         self.pc += 1
 
     def dec_mem_ptr(self):
+        """Implement '>': decrement memory pointer"""
         self.mem_ptr -= 1
         self.pc += 1
 
     def inc_mem(self):
+        """Implement '+': incremenet memory at memory pointer"""
         byte = self.memory.get(self.mem_ptr)
         self.memory.set(self.mem_ptr, byte + 1)
         self.pc += 1
 
     def dec_mem(self):
+        """Implement '-': decrement memory at memory pointer"""
         byte = self.memory.get(self.mem_ptr)
         self.memory.set(self.mem_ptr, byte - 1)
         self.pc += 1
 
+    def skip_loop(self):
+        """Skip instructions until after loop"""
+        loop_count = 1
+        self.pc += 1
+        while loop_count != 0:
+            loop_instr = self.fetch()
+            if loop_instr == "]":
+                loop_count -= 1
+            if loop_instr == "[":
+                loop_count += 1
+            self.pc += 1
+    
     def enter_loop(self):
-        # enter loop if current memory nonzero, otherwise skip
-        # TODO add branching
+        """Enter loop by updating PC stack and PC"""
+        self.pc_stack.append(self.pc)
+        self.pc += 1
+
+    def repeat_loop(self):
+        """Repeat loop by going to first instruction inside it"""
+        self.pc = self.pc_stack[-1] + 1
+    
+    def exit_loop(self):
+        """Exit loop by simply incrementing PC"""
+        self.pc += 1
+
+    def start_loop(self):
+        """Implement '[': start of loop
+        
+        Enter loop if memory pointed to is nonzero, otherwise skip
+        """
         mem_byte = self.memory.get(self.mem_ptr)
         if not isinstance(mem_byte, BitVecNumRef):
-            # can't handle branching from Symbolic bytes yet
-            raise NotImplementedError("Have not implemented branching")
-        mem_byte_num = mem_byte.as_long()
-        #print(f"[DEBUG] Branch pc: {self.pc} byte val: {mem_byte_num}")
-        if mem_byte_num != 0:
-            self.pc_stack.append(self.pc)
-            self.pc += 1
+            # set up successors if branching on symbolic condition
+            # TODO handle constraint being set from symbolic to constant
+            succ0 = copy.deepcopy(self)
+            constraint = succ0.path_constraint
+            succ0.path_constraint = And(constraint, mem_byte == 0)
+            succ0.skip_loop()
+            succ1 = copy.deepcopy(self)
+            constraint = succ1.path_constraint
+            succ1.path_constraint = And(constraint, mem_byte != 0)
+            succ1.enter_loop()
+            self.successors = [succ0, succ1]
         else:
-            loop_count = 1
-            self.pc += 1
-            while loop_count != 0:
-                loop_instr = self.fetch()
-                if loop_instr == "]":
-                    loop_count -= 1
-                if loop_instr == "[":
-                    loop_count += 1
-                self.pc += 1
+            mem_byte_num = mem_byte.as_long()
+            if mem_byte_num != 0:
+                self.enter_loop()
+            else:
+                self.skip_loop()
 
-    def exit_loop(self):
-        # TODO add branching
+    def end_loop(self):
+        """Implement ']': end of loop
+        
+        Repeat loop if current memory cell is non-zero
+        """
         if len(self.pc_stack) == 0:
             raise StackError("Empty stack for jump")
         mem_byte = self.memory.get(self.mem_ptr)
         if not isinstance(mem_byte, BitVecNumRef):
-            # can't handle branching from Symbolic bytes yet
-            raise NotImplementedError
-        mem_byte_num = mem_byte.as_long()
-        # exit loop if current memory cell is zero
-        if mem_byte_num == 0:
-            self.pc_stack.pop()
-            self.pc += 1
+            succ0 = copy.deepcopy(self)
+            constraint = succ0.path_constraint
+            succ0.path_constraint = And(constraint, mem_byte == 0)
+            succ0.exit_loop()
+            succ1 = copy.deepcopy(self)
+            constraint = succ1.path_constraint
+            succ1.path_constraint = And(constraint, mem_byte != 0)
+            succ1.repeat_loop()
+            self.successors = [succ0, succ1]
         else:
-            self.pc = self.pc_stack[-1] + 1
+            mem_byte_num = mem_byte.as_long()
+            # exit loop if current memory cell is zero
+            if mem_byte_num == 0:
+                self.exit_loop()
+            else:
+                self.repeat_loop()
 
     def read(self):
+        """Implement ',': read one (ASCII) character"""
         # TODO actually read input
-        # assumes ascii encoding
-        #char = sys.stdin.read(1)
-        #if char == "\n":
-        #    char = "\0"
-        char = "\0"
-        val = ord(char)
-        byte = BitVecVal(val, 8)
-        self.memory.set(self.mem_ptr, byte)
+        var_name = f"input_{self.input_byte_counter}"
+        input_byte = BitVec(var_name, SymbolicByte.BYTE_SIZE)
+        self.memory.set(self.mem_ptr, input_byte)
         self.pc += 1
 
     def write(self):
-        #TODO Handle SymbolicByte
+        """Implement '.': print one (ASCII) character"""
         val = self.memory.get(self.mem_ptr).as_long()
         char = chr(val)
         sys.stdout.write(char)
         self.pc += 1
     
     def nop(self):
+        """Implement NOP, used for characters that aren't valid instructions"""
         self.pc += 1

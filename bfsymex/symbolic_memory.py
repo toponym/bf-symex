@@ -4,6 +4,7 @@ class MemoryAccessError(Exception):
     """Interpreter Memory Access Errors"""
 
 class SymbolicMemory():
+    """Symbolic Memory for a Symbolic Interpreter instance"""
     BYTE_SIZE = 8
 
     def __init__(self, size, ctx='memory'):
@@ -17,10 +18,12 @@ class SymbolicMemory():
             raise MemoryAccessError(f"Out-of-bounds memory access: {index}")
 
     def get(self, index) -> BitVecRef:
+        """Return memory byte at address"""
         self.memory_guard(index)
         return self.memory[index]
     
     def set(self, index, byte) -> None:
+        """Replace memory byte at address"""
         self.memory_guard(index)
         self.memory[index]= simplify(byte)
     

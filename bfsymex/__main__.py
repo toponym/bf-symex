@@ -1,6 +1,6 @@
 """CLI for bfsymex"""
 import argparse
-from bfsymex import Interpreter, SymbolicInterpreter
+from bfsymex import Interpreter, SymEngine
 
 def get_code(file_path: str):
     """Read code from file or stdin"""
@@ -28,7 +28,7 @@ if __name__ == "__main__":
             interp = Interpreter(list(code))
             interp.interpret()
         case "symex":
-            symex = SymbolicInterpreter(list(code))
-            symex.interpret()
+            symex = SymEngine(list(code))
+            symex.run()
         case _:
             print("Case not supported yet: {args.task}")
